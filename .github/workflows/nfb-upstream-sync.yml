@@ -1,0 +1,41 @@
+name: NFB upstream sync (weekly)
+# Evergreen: merge NousResearch/hermes-agent main into our `nfb` branch every week, run the NFB layer checks and the
+# upstream unit tests that cover what we use; push only if everything passes, else open an issue.
+on:
+  schedule: [{ cron: "17 9 * * 1" }]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+  issues: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: nfb, fetch-depth: 0 }
+      - name: Merge upstream
+        id: merge
+        run: |
+          git config user.name "nfb-bot"; git config user.email "nfb-bot@users.noreply.github.com"
+          git remote add upstream https://github.com/NousResearch/hermes-agent.git
+          git fetch -q upstream main
+          git merge --no-edit upstream/main || { echo "conflict=1" >> "$GITHUB_OUTPUT"; git merge --abort; exit 1; }
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv venv -p 3.14 .venv && VIRTUAL_ENV=.venv uv pip install -q -e ".[anthropic,messaging,cron,mcp,pty]" pytest
+      - name: NFB layer checks
+        run: |
+          bash -n nfb/boot.sh && bash -n nfb/bin/deep-work
+          .venv/bin/python nfb/tests/test_guard.py
+          .venv/bin/python -c "import gateway.platforms.api_server as a; assert a.AIOHTTP_AVAILABLE"
+      - name: Upstream tests (api server, plugins, hooks, fallback)
+        run: .venv/bin/python -m pytest -q -x tests -k "api_server or plugin or transform_llm_output or fallback" --timeout 600 -p no:cacheprovider || .venv/bin/python -m pytest -q -x tests -k "api_server or plugin or fallback"
+      - name: Push
+        run: git push origin HEAD:nfb
+      - name: Report failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({ ...context.repo, title: `Upstream sync failed ${new Date().toISOString().slice(0,10)}`, body: `See ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}` })

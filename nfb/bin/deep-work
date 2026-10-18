@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# NFB deep-work delegate (pluggable). Usage: deep-work "<task>" [workdir]
+# NFB_DELEGATE (in ~/.nfb/agent.env) picks the engine: claude-code (default) | none. New engines plug in here only.
+# Claude Code runs on THIS NFB's own OpenRouter key (Anthropic-compatible endpoint), never a shared key.
+set -u
+IN="${NFB_ENV:-$HOME/.nfb/agent.env}"; envget() { sed -n "s/^$1=//p" "$IN" 2>/dev/null | tail -1; }
+TASK="${1:?usage: deep-work \"<task>\" [workdir]}"; DIR="${2:-$HOME/work}"; mkdir -p "$DIR"; cd "$DIR"
+ENGINE="$(envget NFB_DELEGATE)"; ENGINE="${ENGINE:-claude-code}"
+case "$ENGINE" in
+  claude-code)
+    KEY="$(envget NFB_BRAIN_KEY)"; [ -n "$KEY" ] || { echo "deep-work: brain off (not prepaid)"; exit 3; }
+    PROVIDER="$(envget NFB_BRAIN_PROVIDER)"
+    if [ "${PROVIDER:-openrouter}" = anthropic ]; then export ANTHROPIC_API_KEY="$KEY"; unset ANTHROPIC_AUTH_TOKEN
+    else export ANTHROPIC_BASE_URL="https://openrouter.ai/api" ANTHROPIC_AUTH_TOKEN="$KEY" ANTHROPIC_API_KEY=""; fi
+    M="$(envget NFB_DELEGATE_MODEL)"; export ANTHROPIC_MODEL="${M:-anthropic/claude-opus-5.5}"
+    export ANTHROPIC_DEFAULT_SONNET_MODEL="${ANTHROPIC_MODEL}" ANTHROPIC_DEFAULT_HAIKU_MODEL="anthropic/claude-haiku-5.5" DISABLE_TELEMETRY=1
+    exec timeout "${NFB_DELEGATE_TIMEOUT:-1500}" claude -p "$TASK" --permission-mode bypassPermissions --output-format text --max-turns "${NFB_DELEGATE_MAX_TURNS:-60}" ;;
+  none) echo "deep-work: no delegate engine configured"; exit 2 ;;
+  *) echo "deep-work: unknown engine $ENGINE"; exit 2 ;;
+esac

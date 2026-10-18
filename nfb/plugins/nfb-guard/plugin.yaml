@@ -1,0 +1,4 @@
+name: nfb-guard
+version: 0.1.0
+description: NFB copy locks. Rewrites words an NFB AI agent never uses (tradeable intelligence, asset class, treasury, hire, profit, returns) and strips anything that looks like a secret before a reply leaves the computer.
+author: NFB (jarvis-pd21)

@@ -1,0 +1,21 @@
+# NFB AI agent: Hermes config. nfb/boot.sh renders it into ~/.hermes/config.yaml.
+# Sovereign by design (Phil): every NFB has its own brain key with its own spend limit, kept only in this computer's
+# ~/.hermes/.env (rotated at every handover; the owner can bring their own). Nothing here is shared between NFBs.
+# The model block below is filled by boot.sh from NFB_BRAIN_PROVIDER = openrouter (default) | anthropic | workers-ai.
+
+__MODEL_BLOCK__
+
+# wallet, ClankTok, site tools: the NFB MCP with this AI agent's own key (revoked and reissued at every handover)
+mcp_servers:
+  nfb:
+    url: "__NFB_API__/mcp"
+    headers:
+      Authorization: "Bearer ${NFB_AGENT_KEY}"
+
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+
+display:
+  tool_progress: off
+  busy_input_mode: queue
